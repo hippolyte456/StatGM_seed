@@ -1,0 +1,492 @@
+---
+title: "TD proteome CLUSTERING"
+author: "AUGUSTIN"
+date: "25/01/2022"
+output: 
+    html_document:
+      
+      number_sections : true
+      toc : yes
+      toc_depth : 5
+      toc_float: true
+      highlight: zenburn
+      code_folding: show
+editor_options: 
+   chunk_output_type: console
+---
+
+```{=html}
+<style>
+
+
+h1, h2, h3, h4, h5 {
+
+  color: grey;
+
+}
+
+body { 
+  text-align: justify; 
+  color: black;
+}
+
+code.r {
+  font-family: sans-serif;
+  font-size: 15px;
+}
+
+code {
+  font-family: sans-serif;
+}
+
+
+pre {
+  font-size: 15px;
+}
+
+
+div.perso1 {
+  background-color:lightYellow;
+  border: solid gray 1px;
+  border-radius: 5px;
+  padding: 1% 1% 0%;
+  color:black;
+  font-family: sans-serif;
+  font-size: 18px;
+  text-align: justify; 
+  word-break: normal; 
+} 
+
+</style>
+```
+
+
+
+```{r settings, echo=F,results='hide',warning=F}
+
+
+options(width = 300)
+options(encoding = 'UTF-8')
+
+knitr::opts_chunk$set(
+  fig.width = 8,
+  fig.height = 5,
+  fig.align = "center",
+  fig.show="asis",
+  size = "tiny",
+  include = TRUE,
+  echo = TRUE,
+  eval = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  results="markup",
+  tidy=FALSE, 
+  tidy.opts=list(width.cutoff=90),
+  class.output="bg-success"
+  )
+  
+  
+```
+
+
+# Chargement des librairies pour la session
+
+```{r}
+
+library(knitr)
+
+library(pheatmap)
+
+library(RColorBrewer)
+
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#  install.packages("BiocManager")
+#BiocManager::install("coseq")
+
+library(coseq)
+
+library(ggplot2)
+
+library(FactoMineR)
+
+```
+
+# Import des données : sélection de 214 protéines significatives
+
+```{r}
+
+table1<-read.table("proteome_selection_214.csv", sep=";", dec=".", header=T,row.names=1)
+
+```
+
+# Ajout des données qualitatives de description des echantillons
+
+```{r}
+
+temperature<-factor(rep(c("Low","Medium","Elevated"),each=3),levels=c("Low","Medium","Elevated"))
+ta
+
+```
+# Heatmap
+
+## Preparation de la heatmap
+
+```{r}
+
+# créer un tableau d'annotations des ech°
+# pour rajouter un code couleur d'appartenance des ech° dans l'arbre
+
+sample_group <- data.frame(temperature = temperature)
+
+row.names(sample_group) <- row.names(table1)
+
+sample_group
+
+# éditer le code couleur pour les groupes
+# pour être identique aux couleurs de l'ACP
+
+my_colour = list(
+    temperature = c(
+        "Low" = "blue",
+        "Medium" = "green4",
+        "Elevated" = "orange"))
+
+my_colour
+
+```
+## Exécution de la Heatmap
+
+```{r}
+
+pheatmap(
+    as.matrix(scale(table1)),
+    color = colorRampPalette(rev(brewer.pal(
+        n = 11, name = "RdYlBu"
+    )))(100),
+    clustering_method = "ward.D2",
+    annotation_row = sample_group,
+    annotation_colors = my_colour,
+    cutree_rows = 3,
+    cutree_cols = 4,
+    show_colnames = F,
+    main = "Heatmap",
+    cex = 1,
+    border_color = "black",
+    )
+
+```
+
+::: {.perso1}
+
+* les données sont d'abord scalées (centrée-réduites)
+
+* on demande ici un découpage des arbres en 3 groupes pour les individus et en 4 groupes pour les variables
+
+* en jouant respectivement sur cutree_rows = 3 et cutree_cols = 4
+
+:::
+
+```{r}
+### Création d'un objet contenant les données de la heatmap
+
+
+### Composition et taille des clusters
+
+```{r, fig.show="hide"}
+
+# pour les clusters d'individus en lignes
+# reprendre ici le nombre de clusters d'individus
+# demandé dans la heatmap avec cutree_rows = 3
+# en choisissant la même valeur pour k
+
+kable(sort(cutree(my_heatmap$tree_row, k=3)))
+
+
+# pour les clusters de variables en colonnes
+# reprendre ici le nombre de clusters de variables
+# demandé dans la heatmap avec cutree_cols = 4
+# en choisissant la même valeur pour k
+
+cluster_heatmap_variables <- cutree(my_heatmap$tree_col, k=4)[my_heatmap$tree_col[["order"]]]
+
+kable(head(cluster_heatmap_variables,10))
+
+
+# taille des clusters de variables
+
+kable(table(cluster_heatmap_variables))
+
+```
+### Repérage des clusters de variables sur la heatmap
+
+```{r}
+
+
+annot_col <- data.frame(row.names = names(cluster_heatmap_variables),
+                        cluster = as.factor(cluster_heatmap_variables))
+
+pheatmap(
+    as.matrix(scale(table1)),
+    color = colorRampPalette(rev(brewer.pal(
+        n = 11, name = "RdYlBu"
+    )))(100),
+    clustering_method = "ward.D2",
+    annotation_row = sample_group,
+    annotation_colors = my_colour,
+    cutree_rows = 3,
+    cutree_cols = 4,
+    show_colnames = F,
+    main = "Heatmap",
+    cex = 1,
+    border_color = "black",
+    annotation_col=annot_col
+)
+
+
+
+```
+
+
+## Composition en protéines des clusters
+
+```{r}
+
+# exemple du cluster des protéines qui augmentent globalement avec la température
+# correspondant au cluster 1
+
+kable(cluster_heatmap_variables[cluster_heatmap_variables==1])
+
+```
+
+
+## Export des appartenances des protéines aux clusters
+
+```{r}
+
+cluster_heatmap_variables <-
+  data.frame("proteins" = names(cluster_heatmap_variables),
+             "cluster number" = cluster_heatmap_variables)
+
+write.table(
+  cluster_heatmap_variables,
+  "proteome_heatmap_compositions.csv",
+  append = F,
+  sep = ";",
+  dec = ".",
+  row.names = FALSE
+)
+```
+
+
+
+# Clustering Coseq
+
+::: {.perso1}
+
+* on va seulement clusteriser les variables
+
+:::
+
+## Calculs
+
+```{r, eval=FALSE}
+
+set.seed(123)
+
+run <-
+  coseq(
+    t(scale(table1)),
+    K = 2:20,
+    transformation = "none",
+    norm = "none",
+    model = "normal",
+    GaussianModel = "Gaussian_pk_Lk_Bk",
+    iter = 50
+  )
+
+save(run, file="run_coseq.RData")
+
+```
+
+::: {.perso1}
+
+* l'outil travaille sur les variables en lignes et les échantillons en colonnes
+
+* les données sont d'abord scalées (centrées-réduites)
+
+:::
+
+
+```{r}
+
+load("run_coseq.RData")
+
+```
+
+
+
+
+## Analyse du clustering
+
+### Résumé du clustering
+
+```{r}
+
+summary(run)
+
+```
+
+### Appartenance des variables aux clusters
+
+
+```{r}
+
+clusters(run)
+
+```
+
+
+### Taille des clusters
+
+```{r}
+
+labels <- clusters(run)
+
+kable(table(labels))
+
+```
+
+
+### Sorties graphiques
+
+#### Variations d'ICL : définition du nombre optimal de clusters
+
+```{r}
+
+coseq::plot(run, graphs = "ICL", conds = temperature)
+
+```
+
+#### Probabilités d'appartenance aux clusters
+
+```{r}
+
+coseq::plot(run, graphs="probapost_boxplots")
+
+```
+
+
+#### Distribution des probabilités d'appartenance sur l'ensemble des variables
+
+```{r}
+
+coseq::plot(run, graphs="probapost_histogram")
+
+```
+
+
+
+#### Boxplot sur l'ensemble des échantillons
+
+```{r}
+
+p <-
+  coseq::plot(run, graphs = "boxplots", conds = row.names(table1))$boxplots +
+  
+  scale_x_discrete(breaks = seq(1:9), labels = row.names(table1)) +
+  
+  theme(axis.text.x = element_text(
+    angle = 90,
+    colour = "black",
+    size = 10
+  ))
+
+print(p)
+
+```
+
+
+#### Boxplots sur moyennes de groupes
+
+```{r}
+
+p <- coseq::plot(run,
+                 graphs = "boxplots",
+                 conds = temperature,
+                 collapse_reps = "average")$boxplots +
+  
+      scale_fill_manual(
+        breaks = c("Low",
+                   "Medium",
+                   "Elevated"),
+        values = c("lightblue",
+                   "green3",
+                   "darkorange")
+      )
+
+print(p)
+
+
+```
+
+
+
+## Composition des clusters
+
+
+```{r}
+
+# protéines du cluster n°1 pour l'exemple
+
+list_cluster1 <- names(labels[labels==1])
+
+list_cluster1
+
+list_cluster1 <- data.frame("proteins_C1"=list_cluster1)
+
+# export
+
+write.table(
+  list_cluster1,
+  file = "proteome_coseq_composition_cluster1.csv",
+  append = F,
+  sep = ";",
+  dec = ".",
+  row.names = T,
+  col.names = NA,
+  fileEncoding = "UTF-8"
+)
+
+
+
+# Composition de tous les clusters
+
+list_clusters <- list()
+
+for (i in 1:length(unique(labels))) {
+  
+  list_clusters[[i]] <- names(labels[labels==i])
+  
+  names(list_clusters)[[i]] <- paste("cluster_coseq_",i,sep="")
+  
+}
+
+# export de la composition des clusters
+
+write.infile(list_clusters,"proteome_coseq_compositions.csv" )
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

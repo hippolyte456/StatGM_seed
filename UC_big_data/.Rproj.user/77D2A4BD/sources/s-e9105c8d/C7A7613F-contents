@@ -1,0 +1,96 @@
+---
+title: "TD proteome VAR SELECT"
+author: "Delpierot AUGUSTIN"
+date: "25/01/2022"
+output:
+    html_document:
+      number_sections : true
+      toc : yes
+      toc_depth : 5
+      toc_float: true
+      highlight: zenburn
+      code_folding: show
+editor_options: 
+   chunk_output_type: console
+---
+
+```{=html}
+<style>
+
+h1, h2, h3, h4, h5 {
+
+  color: grey;
+
+}
+
+body { 
+  text-align: justify; 
+  color: black;
+}
+
+code.r {
+  font-family: sans-serif;
+  font-size: 15px;
+}
+
+code {
+  font-family: sans-serif;
+}
+
+
+pre {
+  font-size: 15px;
+}
+
+
+div.perso1 {
+  background-color:lightYellow;
+  border: solid gray 1px;
+  border-radius: 5px;
+  padding: 1% 1% 0%;
+  color:black;
+  font-family: sans-serif;
+  font-size: 18px;
+  text-align: justify; 
+  word-break: normal; 
+} 
+
+</style>
+```
+
+
+
+```{r settings, echo=F,results='hide',warning=F}
+
+
+options(width = 300)
+options(encoding = 'UTF-8')
+
+knitr::opts_chunk$set(
+  fig.width = 7,
+  fig.height = 5,
+  fig.align = "center",
+  fig.show="asis",
+  size = "tiny",
+  include = TRUE,
+  echo = TRUE,
+  eval = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  results="markup",
+  tidy=FALSE, 
+  tidy.opts=list(width.cutoff=90),
+  class.output="bg-success"
+  )
+  
+  
+```
+
+# Chargement des librairies
+
+```{r}
+install.packages("MultiVarSel_1.0.tar.gz",repos=NULL)
+library(reshape)
+library(ggplot2)
+```
+

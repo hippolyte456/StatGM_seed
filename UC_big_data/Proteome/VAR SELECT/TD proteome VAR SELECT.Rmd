@@ -1,0 +1,296 @@
+---
+title: "TD proteome VAR SELECT"
+author: "Delpierot AUGUSTIN"
+date: "25/01/2022"
+output:
+    html_document:
+      number_sections : true
+      toc : yes
+      toc_depth : 5
+      toc_float: true
+      highlight: zenburn
+      code_folding: show
+editor_options: 
+   chunk_output_type: console
+---
+
+```{=html}
+<style>
+
+h1, h2, h3, h4, h5 {
+
+  color: grey;
+
+}
+
+body { 
+  text-align: justify; 
+  color: black;
+}
+
+code.r {
+  font-family: sans-serif;
+  font-size: 15px;
+}
+
+code {
+  font-family: sans-serif;
+}
+
+
+pre {
+  font-size: 15px;
+}
+
+
+div.perso1 {
+  background-color:lightYellow;
+  border: solid gray 1px;
+  border-radius: 5px;
+  padding: 1% 1% 0%;
+  color:black;
+  font-family: sans-serif;
+  font-size: 18px;
+  text-align: justify; 
+  word-break: normal; 
+} 
+
+</style>
+```
+
+
+
+```{r settings, echo=F,results='hide',warning=F}
+
+
+options(width = 300)
+options(encoding = 'UTF-8')
+
+knitr::opts_chunk$set(
+  fig.width = 7,
+  fig.height = 5,
+  fig.align = "center",
+  fig.show="asis",
+  size = "tiny",
+  include = TRUE,
+  echo = TRUE,
+  eval = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  results="markup",
+  tidy=FALSE, 
+  tidy.opts=list(width.cutoff=90),
+  class.output="bg-success"
+  )
+  
+  
+```
+
+# Chargement des librairies
+
+```{r}
+#install.packages("MultiVarSel_1.0.tar.gz",repos=NULL)
+library(MultiVarSel)
+library(reshape)
+library(ggplot2)
+library(knitr)
+```
+
+# Import des données
+
+```{r}
+table1<-read.table("proteome.csv", sep=";", dec=".", header=T,row.names=1)
+```
+
+## Ajout du facteur temperature pour caractériser les echantillons
+
+```{r}
+temperature<-factor(rep(c("Low","Medium","Elevated"),each=3),levels=c("Low","Medium","Elevated"))
+
+table2<-cbind.data.frame(temperature,table1[,-1])
+```
+
+## Vérification de la présence de collones dont les valeures ne bougent jamais et d'éventuelles données manquantes
+```{r}
+which(colMeans(table2[,2:dim(table2)[2]])==0)
+which(apply(table2[,2:dim(table2)[2]],2,sd)==0)
+which(is.na(table2))
+```
+
+
+# Construction de la matrice
+
+```{r}
+Y <- as.matrix(table2[, -1])
+```
+
+```{r}
+X <- model.matrix(lm(Y ~ temperature + 0,data=table2))
+p <- ncol(X)
+n=nrow(X)
+print(n)
+```
+
+```{r}
+q=dim(Y)[2]
+print(q)
+```
+
+## Centrage et réduction de chaque colonne
+
+```{r}
+Y=scale(Y)
+```
+
+## Calcul de la matrice des résidus
+
+```{r}
+residus=lm(as.matrix(Y)~X-1)$residuals
+```
+
+## Test de blancheur
+
+```{r}
+pvalue=whitening_test(residus)
+print(pvalue)
+```
+P-value est supérieur à 0,05 mais par précaution on préferera voir s'il y a des structures de dépendance qui s'adepte mieux à nos données.
+
+## Choix de la structure de dépendance
+
+```{r}
+result=whitening_choice(residus,c("AR1","nonparam","ARMA"),pAR=1,qMA=0)
+result
+```
+
+## Blanchiment des données selon une structure de dépendance paramétrique et estimation de sigma
+
+```{r}
+square_root_inv_hat_Sigma=whitening(residus,"nonparam",pAR=1,qMA=0)
+```
+
+## Fréquences patimonieuse des "betas"
+
+```{r}
+#Freqs2=variable_selection(Y,X,square_root_inv_hat_Sigma,
+#                    nb_repli=7000,parallel=FALSE,nb.cores=1)
+
+```
+## Sauvegarde de nos estimations
+```{r}
+#save(Freqs2,
+#     file='Freqs_proteome_TOEPLITZ_nbreplis_7000_2022.Rdata')
+```
+
+```{r}
+load("Freqs_proteome_TOEPLITZ_nbreplis_7000_2022.Rdata")
+
+max(Freqs2$frequency)
+```
+
+## Représentations de nos estimation de "beta"
+```{r}
+colnames(Freqs2)<-c('Names_of_Y','Names_of_X','frequency')
+Freqs2=data.frame(Freqs2)
+
+plot(sort(Freqs2$frequency,decreasing = TRUE),type='s')
+plot(Freqs2$frequency)
+```
+
+## Classement décroissant
+```{r}
+colnames(Freqs2)<-c('Names_of_Y','Names_of_X','frequency')
+sort(Freqs2$frequency,decreasing = T)[1:50]
+```
+
+```{r}
+seuil=0.95
+Freqs2$Names_of_X=gsub(pattern='temperature',replacement='',Freqs2$Names_of_X)
+indices=which(Freqs2$frequency>=seuil)
+```
+
+```{r}
+Yvec=as.numeric(Y%*%square_root_inv_hat_Sigma)
+Xvec=kronecker(t(square_root_inv_hat_Sigma),X)
+Xvec_sel=(Xvec[,indices])
+B_sel_hat=solve(t(Xvec_sel)%*%Xvec_sel,t(Xvec_sel)%*%Yvec)
+Freqs2$estim=rep(0,p*q)
+Freqs2$estim[indices]=as.vector(B_sel_hat)
+```
+
+```{r}
+gr<-ggplot(data=Freqs2[Freqs2$frequency>=seuil,],
+aes(x=Names_of_Y,y=Names_of_X,color=estim))+
+scale_color_gradient2(low="steelblue",mid = "white", high ="red")+
+geom_point(size=2)+theme_bw()+ylab('Temperature')+
+xlab('Proteins')+theme(axis.text.x = element_text(angle=90))
+gr
+save(gr,file="PROT_95_7krep.png")
+```
+
+# Exportation des données
+
+```{r}
+estime=Freqs2[Freqs2$estim>0,]
+estime$Names_of_Y
+estime=data.frame(estime)
+```
+
+```{r}
+prot.select<-read.table("prot_var_select.csv", sep="", dec=".", header=T,row.names=1)
+
+temperature<-factor(rep(c("Low","Medium","Elevated"),each=3),levels=c("Low","Medium","Elevated"))
+
+prot.select<-cbind.data.frame(temperature,prot.select[,-1])
+prot.select[,-1]
+```
+
+```{r}
+library("knitr") # pour avoir un format table dans les sorties
+library("ggplot2") # pour avoir de "beaux"" graphiques
+library("FactoMineR") # pour effectuer l'ACP
+library("factoextra") # pour extraire et visualiser les résultats issus de FactoMineR
+library("corrplot")
+```
+
+```{r}
+prot.CR=scale(prot.select[,2:22])
+ncol(prot.select[,2:22])
+```
+
+```{r}
+# methode des kmeans
+Kmax = ncol(prot.CR)
+IW=numeric(Kmax)
+for (k in 1:(Kmax))
+{
+km = kmeans(prot.CR,centers=k,nstart = 200)
+IW[k] = km$tot.withinss
+}
+
+ggplot(data.frame(k = 1:(Kmax),
+                  Iw = IW)) +
+  aes(x = k, y = Iw) +
+  geom_point() + # On trace les points
+  geom_line() + # On les relie par une ligne
+  labs(x = "K",y = expression(I[W](K)))
+```
+
+```{r}
+K = 3
+km.prot.CR = kmeans(prot.CR,centers=K,nstart = 200)
+km.prot.CR$totss
+```
+
+```{r}
+km.prot.CR$betweenss
+
+km.prot.CR$tot.withinss
+
+km.prot.CR = km.prot.CR$cluste
+kable(km.prot.CR)
+```
+
+```{r}
+```
+

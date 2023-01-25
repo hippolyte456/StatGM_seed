@@ -1,0 +1,601 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"></head><body>---
+title: "Anova proteome"
+subtitle: ""
+author: 
+date: 
+output:
+    html_document:
+
+      number_sections : true
+      toc : yes
+      toc_depth : 5
+      toc_float: true
+      highlight: zenburn
+      code_folding: show
+
+editor_options: 
+   chunk_output_type: console
+---
+
+```{=html}
+<style>
+
+h1, h2, h3, h4, h5 {
+
+  color: grey;
+
+}
+
+body { 
+  text-align: justify; 
+  color: black;
+}
+
+code.r {
+  font-family: sans-serif;
+  font-size: 15px;
+}
+
+code {
+  font-family: sans-serif;
+}
+
+
+pre {
+  font-size: 15px;
+}
+
+
+div.perso1 {
+  background-color:lightYellow;
+  border: solid gray 1px;
+  border-radius: 5px;
+  padding: 1% 1% 0%;
+  color:black;
+  font-family: sans-serif;
+  font-size: 18px;
+  text-align: justify; 
+  word-break: normal; 
+} 
+
+</style>
+```
+
+
+
+```{r settings, echo=F,results='hide',warning=F}
+
+
+options(width = 300)
+options(encoding = 'UTF-8')
+
+knitr::opts_chunk$set(
+  fig.width = 7,
+  fig.height = 5,
+  fig.align = "center",
+  fig.show="asis",
+  size = "tiny",
+  include = TRUE,
+  echo = TRUE,
+  eval = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  results="markup",
+  tidy=FALSE, 
+  tidy.opts=list(width.cutoff=90),
+  class.output="bg-success"
+  )
+  
+  
+```
+
+# Chargement des librairies
+
+```{r, warning=FALSE}
+
+library(knitr)
+
+library(formatR)
+
+library(multcomp)
+
+library(ggplot2)
+
+library(ggpubr)
+
+library(dplyr)
+
+library(prettydoc)
+
+```
+
+
+# Import des données
+
+```{r}
+
+table1&lt;-read.table("proteome.csv", sep=";", dec=".", 
+header=T,row.names=1)
+
+```
+
+
+# Préparation des données
+
+## Transformation log base 10 des valeurs individuelles du tableau
+
+```{r}
+
+table2&lt;-log10(table1)
+
+```
+
+
+## Ajout du facteur temperature pour caractériser les echantillons
+
+```{r}
+
+temperature&lt;-factor(rep(c("Low","Medium","Elevated"),each=3),levels=c("Low","Medium","Elevated"))
+
+table2&lt;-cbind.data.frame(temperature,table2)
+
+```
+
+
+#
+ Représentation graphique des variables
+
+## Boxplot pour une variable en particulier
+
+```{r}
+
+# exemple sur la 3eme protéine du tableau
+
+i = "AT1G02700.1"
+
+varname &lt;- colnames(table2[i])
+
+g &lt;-
+  ggplot(table2, aes(fill = temperature)) + # remplissage des box selon 
+modalités de temperature
+  geom_boxplot(aes_string(x = temperature, y = table2[, i])) +
+  labs(title = varname, x = "temperature conditions", y = "protein 
+abundance") + # pour définir tous les titres du graphique
+  theme(plot.title = element_text(
+    colour = "red",
+    size = 30,
+    hjust = 0.5
+  )) + # formatage titre, hjust = 0.5 pour centrer
+  theme(axis.title.x = element_text(colour = "black", size = 15)) + # 
+formatage étiquette des abscisses
+  theme(axis.title.y = element_text(colour = "black", size = 15)) + # 
+formatage étiquette des ordonnées
+  theme(axis.text.x = element_text(colour = "black", size = 15)) + # 
+formatage valeurs en abscisses
+  theme(axis.text.y = element_text(colour = "black", size = 15)) + # 
+formatage valeurs en ordonnées
+  scale_fill_manual(
+    breaks = c("Low", "Medium", "Elevated"),
+    values = c("lightblue", "green", "orange")
+  ) # pour fixer les couleurs des box
+
+print(g)
+
+```
+
+
+## Boxplot sur toutes les variables
+
+```{r, eval=FALSE}
+
+
+pdf("boxplot proteome 724 protéines.pdf")
+
+for (i in 2:ncol(table2)) {
+  varname &lt;- colnames(table2[i])
+  
+  g &lt;-
+    ggplot(table2, aes(fill = temperature)) + # remplissage des box 
+selon modalités de temperature
+    geom_boxplot(aes_string(x = temperature, y = table2[, i])) +
+    labs(title = varname, x = "temperature conditions", y = "protein 
+abundance") + # pour définir tous les titres du graphique
+    theme(plot.title = element_text(
+      colour = "red",
+      size = 30,
+      hjust = 0.5
+    )) + # formatage titre, hjust = 0.5 pour centrer
+    theme(axis.title.x = element_text(colour = "black", size = 15)) + # 
+formatage étiquette des abscisses
+    theme(axis.title.y = element_text(colour = "black", size = 15)) + # 
+formatage étiquette des ordonnées
+    theme(axis.text.x = element_text(colour = "black", size = 15)) + # 
+formatage valeurs en abscisses
+    theme(axis.text.y = element_text(colour = "black", size = 15)) + # 
+formatage valeurs en ordonnées
+    scale_fill_manual(
+      breaks = c("Low", "Medium", "Elevated"),
+      values = c("lightblue", "green", "orange")
+    ) # pour fixer les couleurs des box
+  
+  print(g)
+}
+
+dev.off()
+
+```
+
+
+
+# Analyse de la variance sur chaque variable
+
+## Anova
+
+```{r}
+
+pvalue.anova&lt;- c()
+
+for(i in 2:ncol(table2)){
+  res.anova&lt;-aov(table2[,i]~temperature, data=table2)
+  paramANOVA&lt;-summary(res.anova)
+  pvalue.anova &lt;- c(pvalue.anova, paramANOVA[[1]][,5][1])
+}
+
+names(pvalue.anova) &lt;- colnames(table1)
+
+ggplot(as.data.frame(pvalue.anova), aes(x=pvalue.anova)) + 
+  geom_histogram(binwidth=0.01,color="black", fill="lightgray")+
+  labs(title="distribution p-values")+
+  theme_dark()+
+   theme(plot.title = element_text(
+      size = 15,
+      hjust = 0.5))
+
+```
+
+
+## Nombre de variables significatives pour differents seuils
+
+```{r}
+
+liste1 &lt;- pvalue.anova[pvalue.anova&lt;0.05]
+length(liste1)
+
+liste2 &lt;- pvalue.anova[pvalue.anova&lt;0.01]
+length(liste2)
+
+liste3 &lt;- pvalue.anova[pvalue.anova&lt;0.001]
+length(liste3)
+
+```
+
+
+## Correction des pvalues pour tests multiples
+
+```{r}
+
+pvalue.anova.adj &lt;- p.adjust(pvalue.anova,method="fdr")
+
+length(pvalue.anova.adj)
+
+
+ggplot(as.data.frame(pvalue.anova.adj), aes(x=pvalue.anova.adj)) + 
+  geom_histogram(binwidth=0.01,color="black", fill="lightgray")+
+  labs(title="distribution p-values")+
+  theme_dark()+
+   theme(plot.title = element_text(
+      size = 15,
+      hjust = 0.5))
+
+```
+
+
+## Application d'un filtre sur les pvalues corrigées
+
+```{r}
+
+liste4 &lt;- pvalue.anova.adj[pvalue.anova.adj&lt;0.05]
+length(liste4)
+
+liste5 &lt;- pvalue.anova.adj[pvalue.anova.adj&lt;0.01]
+length(liste5)
+
+liste6 &lt;- pvalue.anova.adj[pvalue.anova.adj&lt;0.001]
+length(liste6)
+
+```
+
+
+## Sélection de variables basée sur l'Anova
+
+```{r}
+
+table_selection &lt;- table1[,which(colnames(table1) %in% 
+names(liste1))] 
+
+# export
+
+write.table(
+  table_selection,
+  file = "proteome_selection_214.csv",
+  append = F,
+  sep = ";",
+  dec = ".",
+  row.names = T,
+  col.names = NA,
+  fileEncoding = "UTF-8"
+)
+
+
+```
+
+::: {.perso1}
+
+* critères de sélection : seuil de 0.05 sur p-values non corrigées
+
+* ça correspond à des critères les plus ouverts possible, avec un risque
+ élevé de faux positifs dans la sélection
+
+* mais on garde dans un premier temps, en 1ere analyse, un maximum de 
+variables pour garder un maximum d'informations biologiques
+
+* on sélectionne ainsi 214 protéines
+
+:::
+
+
+# Analyse des anovas : les comparaisons multiples (tests post-hoc)
+
+## Comparaison entre groupes pris 2 à 2
+
+```{r}
+
+# création d'un tableau "tabmult" qui collecte
+# l'ensemble des p-values de comparaisons multiples
+
+tabmult=NULL
+
+for(i in 2:ncol(table2)){
+  aov&lt;-aov(table2[,i]~temperature, data=table2)
+  multcomp&lt;-TukeyHSD(aov)
+  tabmult&lt;-cbind(tabmult,multcomp$temperature [,4])
+}
+
+colnames(tabmult)&lt;-colnames(table1)
+
+kable(formatC(tabmult[,1:8], format="e",digits=2))
+
+```
+
+
+## Boxplot de Tukey (avec cld) pour une variable en particulier
+
+```{r, eval=TRUE}
+
+# exemple de la protéines AT5G20720.1
+
+i="AT5G20720.1"
+
+  varname &lt;- colnames(table2[i])
+  res.anova &lt;- aov(table2[,i] ~ temperature, data = table2)
+  tuk &lt;- glht(res.anova, linfct = mcp(temperature = "Tukey"))
+  CLD &lt;- cld(tuk, level = 0.05)
+  CLD &lt;-
+    data.frame(
+      temperature = names(CLD$mcletters$Letters),
+      lettres = CLD$mcletters$Letters
+    )
+
+  g &lt;- ggplot(table2, aes(fill = temperature)) +
+    geom_boxplot(aes_string(x = table2$temperature, y = table2[,i])) +
+    labs(title = paste(varname,sep=""), x = "temperature conditions", y =
+ " protein abundance") +
+    theme_grey() +
+    theme(plot.title = element_text(
+      colour = "red",
+      size = 20,
+      hjust = 0.5
+    )) +
+    theme(axis.title.x = element_text(colour = "black", size = 15)) +
+    theme(axis.title.y = element_text(colour = "black", size = 15)) +
+    theme(axis.text.x = element_text(
+      angle = 0,
+      colour = "black",
+      size = 10
+    )) +
+    theme(axis.text.y = element_text(colour = "black", size = 10)) +
+
+    geom_text(
+      data = CLD,
+      aes(
+        x = temperature,
+        label = lettres,
+        y = max(table2[,i])+max(table2[,i])*0.05
+      ),
+      colour = "black",
+      size = 6
+    ) +
+
+    scale_fill_manual(
+      breaks = c(
+        "Low","Medium","Elevated"
+      ),
+      values = c(
+        "lightblue", "green", "orange"
+      )
+    )
+
+  print(g)
+
+```
+
+
+
+## Boxplot de Tukey (avec cld) pour l'ensemble des protéines
+
+```{r, echo=T, eval=FALSE}
+
+pdf("boxplot Tukey proteome 724 protéines.pdf")
+
+for (i in 2:ncol(table2)) {
+
+  varname &lt;- colnames(table2[i])
+  res.anova &lt;- aov(table2[,i] ~ temperature, data = table2)
+  tuk &lt;- glht(res.anova, linfct = mcp(temperature = "Tukey"))
+  CLD &lt;- cld(tuk, level = 0.05)
+  CLD &lt;-
+    data.frame(
+      temperature = names(CLD$mcletters$Letters),
+      lettres = CLD$mcletters$Letters
+    )
+
+  g &lt;- ggplot(table2, aes(fill = temperature)) +
+    geom_boxplot(aes_string(x = table2$temperature, y = table2[,i])) +
+    labs(title = paste(varname,sep=""), x = "temperature conditions", y =
+ " protein abundance") +
+    theme_grey() +
+    theme(plot.title = element_text(
+      colour = "red",
+      size = 20,
+      hjust = 0.5
+    )) +
+    theme(axis.title.x = element_text(colour = "black", size = 15)) +
+    theme(axis.title.y = element_text(colour = "black", size = 15)) +
+    theme(axis.text.x = element_text(
+      angle = 0,
+      colour = "black",
+      size = 10
+    )) +
+    theme(axis.text.y = element_text(colour = "black", size = 10)) +
+
+    geom_text(
+      data = CLD,
+      aes(
+        x = temperature,
+        label = lettres,
+        y = max(table2[,i])+max(table2[,i])*0.05
+      ),
+      colour = "black",
+      size = 6
+    ) +
+
+    scale_fill_manual(
+      breaks = c(
+        "Low","Medium","Elevated"
+      ),
+      values = c(
+        "lightblue", "green", "orange"
+      )
+    )
+
+  print(g)
+
+}
+
+dev.off()
+
+```
+
+
+
+## Récupération de la matrice de Tukey (cld)
+
+```{r}
+
+# compilation des cld dans l'objet matrice.tuk
+
+varname&lt;-c()
+matrice.tuk&lt;-matrix()
+
+for (i in 2:ncol(table2)){  
+  varname&lt;-colnames(table2[i])
+  aov&lt;-aov(table2[,i]~temperature, data=table2)
+  tuk &lt;- glht(aov, linfct=mcp(temperature="Tukey"))
+  out.cld&lt;-cld(tuk, level=0.05)
+  
+matrice.tuk&lt;-cbind.data.frame(matrice.tuk,out.cld$mcletters$Letters)
+}
+
+
+matrice.tuk &lt;- matrice.tuk[,-1]
+colnames(matrice.tuk)&lt;-colnames(table1)
+
+kable(matrice.tuk[,1:8])
+
+```
+
+
+## Recherche de profil de variation type sur la base des cld
+
+### R de base
+
+```{r}
+## exemple d'un profil de variation sur la température : "a-a-b"
+
+matrice.tuk.ftr&lt;-matrice.tuk[,which(matrice.tuk[1,]=="a" &amp; 
+matrice.tuk[2,]=="a" &amp; matrice.tuk[3,]=="b")]
+
+dim(matrice.tuk.ftr)
+
+kable(matrice.tuk.ftr[,1:8])
+```
+
+
+```{r, eval=FALSE}
+
+matrice.tuk.ftr
+
+```
+
+
+### Tidyverse
+
+```{r, eval=F}
+# approche "tidyverse" pour la sélection de variables sur profil
+
+matrice.tuk.ftr &lt;-
+  as_tibble(t(matrice.tuk)) %&gt;% mutate("proteins" = 
+colnames(matrice.tuk)) %&gt;%
+  select(proteins, everything()) %&gt;% filter(Low == "a", Medium == 
+"b", Elevated == "c")
+
+kable(matrice.tuk.ftr)
+
+```
+
+
+# Création et export du tableau de résultats final
+
+```{r}
+
+# calcul des moyennes par groupe de température
+
+matrice.moy&lt;- 
+aggregate(table2[,2:ncol(table2)],by=list(table2$temperature),FUN=mean)[,-1]
+
+colnames(matrice.moy)
+ &lt;- colnames(table1)
+
+row.names(matrice.moy) &lt;- c("Low mean","Medium mean","Elevated mean")
+
+# fusion de toutes les sorties statistiques sur les variables
+# pour générer un tableau de synthèse exporté au format .csv
+# pour ouverture dans un tableur
+# fonction d'export : write.table !!!
+
+table3 &lt;-
+  rbind.data.frame(
+    round(matrice.moy, 3),
+    "pvalue.anova" = formatC(pvalue.anova, format = "e", digits = 2),
+    "pvalue.anova.adj" = formatC(pvalue.anova.adj, format = "e", digits =
+ 2),
+    formatC(tabmult, format = "e", digits = 2),
+    matrice.tuk
+  )
+
+write.table(t(table3),"tableau final anova 
+proteome.csv",dec=".",sep=";",append=F,row.names=T,col.names=NA)
+
+```
+</body></html>

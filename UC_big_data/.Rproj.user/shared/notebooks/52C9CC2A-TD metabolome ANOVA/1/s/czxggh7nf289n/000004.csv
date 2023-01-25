@@ -1,0 +1,3 @@
+"0",""
+"0","table1<-read.table(""metabolome.csv"", sep="";"", dec=""."", header=T,row.names=1)"
+"0",""
