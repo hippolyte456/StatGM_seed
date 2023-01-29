@@ -1,0 +1,10 @@
+---
+title: "Auguste Test"
+output: html_notebook
+---
+
+
+```{r}
+table1<-read.table("./Table_proteome_FH_all.csv")
+```
+
