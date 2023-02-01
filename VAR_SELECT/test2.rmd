@@ -1,0 +1,283 @@
+---
+title: "Clustering metabolome valeur select"
+subtitle: ""
+author: 
+date: 
+output: 
+    html_document:
+      
+      number_sections : true
+      toc : yes
+      toc_depth : 5
+      toc_float: true
+      highlight: zenburn
+      code_folding: show
+editor_options: 
+   chunk_output_type: console
+---
+
+```{=html}
+<style>
+
+
+h1, h2, h3, h4, h5 {
+
+  color: grey;
+
+}
+
+body { 
+  text-align: justify; 
+  color: black;
+}
+
+code.r {
+  font-family: sans-serif;
+  font-size: 15px;
+}
+
+code {
+  font-family: sans-serif;
+}
+
+
+pre {
+  font-size: 15px;
+}
+
+
+div.perso1 {
+  background-color:lightYellow;
+  border: solid gray 1px;
+  border-radius: 5px;
+  padding: 1% 1% 0%;
+  color:black;
+  font-family: sans-serif;
+  font-size: 18px;
+  text-align: justify; 
+  word-break: normal; 
+} 
+
+</style>
+```
+
+
+
+```{r settings, echo=F,results='hide',warning=F}
+
+
+options(width = 300)
+options(encoding = 'UTF-8')
+
+knitr::opts_chunk$set(
+  fig.width = 8,
+  fig.height = 5,
+  fig.align = "center",
+  fig.show="asis",
+  size = "tiny",
+  include = TRUE,
+  echo = TRUE,
+  eval = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  results="markup",
+  tidy=FALSE, 
+  tidy.opts=list(width.cutoff=90),
+  class.output="bg-success"
+  )
+  
+  
+```
+
+
+# Chargement des librairies pour la session
+
+```{r}
+
+library(knitr)
+
+library(pheatmap)
+
+library(RColorBrewer)
+
+library(coseq)
+
+library(ggplot2)
+
+library(FactoMineR)
+
+```
+
+
+
+# Import des donnÃ©es : sÃ©lection de 70 mÃ©tabolites significatifs
+
+```{r}
+
+table1<-read.table("selection_metabolites_seuil_0-9.csv", sep=";", dec=".", header=T,row.names=1)
+
+```
+
+# Ajout des donnÃ©es qualitatives de description des echantillons
+
+```{r}
+
+temperature<-factor(rep(c("Low","Medium","Elevated"),each=3),levels=c("Low","Medium","Elevated"))
+
+```
+
+
+
+# Heatmap
+
+## Preparation de la heatmap
+
+```{r}
+
+# crÃ©er un tableau d'annotations des echÂ°
+# pour rajouter un code couleur d'appartenance des echÂ° dans l'arbre
+
+sample_group <- data.frame(temperature = temperature)
+
+row.names(sample_group) <- row.names(table1)
+
+sample_group
+
+# Ã©diter le code couleur pour les groupes
+# pour Ãªtre identique aux couleurs de l'ACP
+
+my_colour = list(
+    temperature = c(
+        "Low" = "blue",
+        "Medium" = "green4",
+        "Elevated" = "orange"))
+
+my_colour
+
+```
+
+## ExÃ©cution de la Heatmap
+
+```{r}
+
+pheatmap(
+    as.matrix(scale(table1)),
+    color = colorRampPalette(rev(brewer.pal(
+        n = 11, name = "RdYlBu"
+    )))(100),
+    clustering_method = "ward.D2",
+    annotation_row = sample_group,
+    annotation_colors = my_colour,
+    cutree_rows = 3,
+    cutree_cols = 4,
+    show_colnames = F,
+    main = "Heatmap",
+    cex = 1,
+    border_color = "black",
+    )
+
+```
+
+
+## Analyse de la heatmap
+
+### CrÃ©ation d'un objet contenant donnÃ©es de la heatmap
+
+```{r, fig.show="hide"}
+
+my_heatmap <- pheatmap(
+    as.matrix(scale(table1)),
+    color = colorRampPalette(rev(brewer.pal(
+        n = 11, name = "RdYlBu"
+    )))(100),
+    clustering_method = "ward.D2",
+    annotation_row = sample_group,
+    annotation_colors = my_colour,
+    cutree_rows = 3,
+    cutree_cols = 4,
+    show_colnames = F,
+    main = "Heatmap",
+    cex = 1,
+    border_color = "black",
+    silent=TRUE
+)
+```
+
+
+### Composition et taille des clusters
+
+```{r, fig.show="hide"}
+
+# pour les clusters d'individus en lignes
+# reprendre ici le nombre de clusters d'individus
+# demandÃ© dans la heatmap avec cutree_rows = 3
+# en choisissant la mÃªme valeur pour k
+
+kable(sort(cutree(my_heatmap$tree_row, k=3)))
+
+
+# pour les clusters de variables en colonnes
+# reprendre ici le nombre de clusters de variables
+# demandÃ© dans la heatmap avec cutree_cols = 4
+# en choisissant la mÃªme valeur pour k
+
+cluster_heatmap_variables <- cutree(my_heatmap$tree_col, k=4)[my_heatmap$tree_col[["order"]]]
+
+kable(head(cluster_heatmap_variables,10))
+
+
+# taille des clusters de variables
+
+kable(table(cluster_heatmap_variables))
+
+```
+
+
+### RepÃ©rage des clusters de variables sur la heatmap
+
+```{r}
+
+
+annot_col <- data.frame(row.names = names(cluster_heatmap_variables),
+                        cluster = as.factor(cluster_heatmap_variables))
+
+pheatmap(
+    as.matrix(scale(table1)),
+    color = colorRampPalette(rev(brewer.pal(
+        n = 11, name = "RdYlBu"
+    )))(100),
+    clustering_method = "ward.D2",
+    annotation_row = sample_group,
+    annotation_colors = my_colour,
+    cutree_rows = 3,
+    cutree_cols = 4,
+    show_colnames = F,
+    main = "Heatmap",
+    cex = 1,
+    border_color = "black",
+    annotation_col=annot_col
+)
+
+
+
+```
+
+## Export des appartenances des mÃ©tabolites aux clusters
+
+```{r}
+
+cluster_heatmap_variables <-
+  data.frame("metabolites" = names(cluster_heatmap_variables),
+             "cluster number" = cluster_heatmap_variables)
+
+
+write.table(
+  cluster_heatmap_variables,
+  "metabolome_heatmap_compositions_seuil_0-9.csv",
+  append = F,
+  sep = ";",
+  dec = ".",
+  row.names = FALSE
+)
+```
+

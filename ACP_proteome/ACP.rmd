@@ -1,10 +1,186 @@
 ---
-title: "Auguste Test"
+title: "ACP"
 output: html_notebook
 ---
 
+# Importation des bibliothèques
 
 ```{r}
-table1<-read.table("./Table_proteome_FH_all.csv")
+library(knitr)
+library(FactoMineR)
+library(factoextra)
 ```
+
+# Importation des données
+
+```{r}
+table<-read.table("../Table_proteome_FH_all.csv", sep=";", dec=",", header=T,row.names=1)
+```
+
+
+# Ajout des données qualitatives
+
+```{r}
+temperature<-factor(rep(c("Low","Medium","Elevated"),each=3),levels=c("Low","Medium","Elevated"))
+
+imbibition<-factor(rep(c("DS", "EI", "LI"), each=3), levels=c("DS", "EI", "LI"))
+```
+
+DS (Dry seed)
+EI après 6h d’imbibition (Early imbibition) orrespondant à la fin de la prise d’eau.
+LI après 20h d’imbibition (Late imbibition)) 
+
+```{r}
+# passage en category des colonnes qualitatives
+table$temperature <- as.factor(table$temperature)
+table$group <- as.factor(table$group)
+table$rep <- as.factor(table$rep)
+table$imbibition <- as.factor(table$imbibition)
+
+# Check si présence de NA
+sum(is.na(table))
+```
+# ACP
+
+```{r}
+res_pca<-PCA(table, graph = F, quali.sup = c(1,2,3,4))
+```
+
+# Histogramme des valeurs propres
+
+```{r}
+fviz_eig(res_pca, addlabels = TRUE)
+ggsave("./images/histogram_pca.png", bg = "white")
+```
+
+
+```{r}
+# axes 1-2 for imbibition
+fviz_ellipses(res_pca, axes=c(1,2), habillage = "imbibition", palette=c("blue", "darkgreen", "orange"))
+ggsave("./images/imbibition_map_pca.png", bg = "white")
+```
+
+```{r}
+# axes 1-2 for temperature
+fviz_ellipses(res_pca, axes=c(1,2), habillage = "temperature", palette=c("blue", "darkgreen", "orange"))
+ggsave("./images/temperature_map_pca.png", bg = "white")
+
+```
+
+# Nuage des variables
+
+```{r}
+# Toutes les variables
+
+fviz_pca_var(res_pca)
+
+## Selection de 50 variables les plus fortes avec coloration selon les conditions
+
+# axes 1-2
+
+fviz_pca_var(
+  res_pca
+  , axes = c(1,2)
+  , col.var = "contrib"
+  , gradient.cols = c("blue", "darkgreen", "orange")
+  , select.var = list(contrib = 50)
+)
+```
+
+# Biplot : individus + Variables
+
+```{r}
+fviz_pca_biplot(
+  res_pca
+  , axes = c(1,2)
+  , col.ind = table$temperature
+  , palette = c("blue", "darkgreen", "orange")
+  , addEllipses = TRUE
+  , label =  "all"
+  , col.var = "black"
+  , select.var = list(contrib = 50)
+  , arrowsize = 0.2
+  , labelsize = 2
+  , repel = FALSE
+  , legend.title = "temperature"
+)
+
+ggsave("./images/temperature_Biplot_pca.png", bg = "white")
+
+```
+
+```{r}
+fviz_pca_biplot(
+  res_pca
+  , axes = c(1,2)
+  , col.ind = table$imbibition
+  , palette = c("blue", "darkgreen", "orange")
+  , addEllipses = TRUE
+  , label =  "all"
+  , col.var = "black"
+  , select.var = list(contrib = 50)
+  , arrowsize = 0.2
+  , labelsize = 2
+  , repel = FALSE
+  , legend.title = "imbibition"
+)
+ggsave("./images/imbibition_Biplot_pca.png", bg = "white")
+
+```
+
+# Analyse de l'ACP
+
+## Les individus
+
+```{r}
+ind <- get_pca_ind(res_pca)
+
+print(ind)
+
+# Coordonnees des individus sur les axes
+kable(round(ind$coord,2))
+
+# Contributions des individus sur les axes
+kable(round(ind$contrib,2))
+
+write.table(round(ind$coord,2), "./tables_output/acp_proteome_FH_coord_indiv.csv", append = FALSE, sep=";", dec=".", row.names = TRUE, col.names = NA)
+```
+
+
+## Les variables
+
+```{r}
+var <- get_pca_var(res_pca)
+
+print(ind)
+
+# Coordonnees des individus sur les axes
+kable(round(var$contrib,2))
+
+# Contributions des individus sur les axes
+kable(round(var$cor,2))
+
+write.table(round(var$cor,2), "./tables_output/acp_proteome_FH_correlations_variables.csv", append = FALSE, sep=";", dec=".", row.names = TRUE, col.names = NA)
+```
+
+
+## Filtrage et regroupement des variables
+
+
+```{r}
+tab_var_acp1<-var$cor[order(var$cor[,1],decreasing = TRUE),]
+
+# axe 1 + 
+groupe1 <- tab_var_acp1[which(tab_var_acp1[,1]>=0.8),]
+# Top 10
+kable(head(round(groupe1,2),10))
+write.table(round(groupe1,2), "./tables_output/acp_proteome_groupe1.csv", sep=";", dec=".", append = F, row.names = T, col.names = NA)
+
+# axe 1 - 
+groupe2 <- tab_var_acp1[which(tab_var_acp1[,1]>=-0.8),]
+# Top 10
+kable(head(round(groupe2,2),10))
+write.table(round(groupe2,2), "./tables_output/acp_proteome_groupe2.csv", sep=";", dec=".", append = F, row.names = T, col.names = NA)
+```
+
 
