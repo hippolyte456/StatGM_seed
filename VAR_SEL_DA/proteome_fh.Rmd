@@ -1,0 +1,115 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-02-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install.packages("MultiVarSel_1.0.tar.gz", repos = NULL, type = "source")
+```
+```{r}
+library(MultiVarSel)
+```
+
+```{r}
+tab = read.table("Table_proteome_FH_all.csv", sep=';',header=TRUE, dec = ',')
+```
+
+```{r}
+tab$temperature = as.factor(tab$temperature)
+tab$imbibition = as.factor(tab$imbibition)
+```
+
+# Sélection de variable
+
+## Construction de la matrice de disign
+```{r}
+Y = as.matrix(tab[,6:499])
+X = model.matrix(lm(Y ~ temperature + imbibition + 0,data=tab))
+p = ncol(X)
+n = nrow(X)
+q = dim(Y)[2]
+Y_scaled = scale(Y)
+```
+
+## Estimation des résidues
+```{r}
+residuals = lm(as.matrix(Y_scaled)~X-1)$residuals
+```
+
+## Test de blancheur
+
+```{r}
+pvalue = whitening_test(residuals)
+pvalue
+```
+p-value supérieur à 0,05 ==> bruit blanc pas besoin de blanchir les données
+
+## Obtention de la matrice identité
+```{r}
+square_root_inv_hat_Sigma = whitening(residuals, "no_whitening", pAR = 1, qMA = 0)
+```
+
+## Calcul des fréquences
+```{r}
+Freqs = variable_selection(Y_scaled, X, square_root_inv_hat_Sigma,
+                          nb_repli = 500000, parallel = FALSE, nb.cores = 1)
+```
+
+```{r}
+save(Freqs, file='proteome_nw_500K_rep.Rdata')
+```
+
+```{r}
+load("proteome_nw_500K_rep.Rdata")
+Freqs2 = Freqs
+max(Freqs2$frequency)
+min(Freqs2$frequency)
+```
+
+```{r}
+colnames(Freqs2)<-c('Names_of_Y','Names_of_X','frequency')
+Freqs2=data.frame(Freqs2)
+
+plot(sort(Freqs2$frequency,decreasing = TRUE),type='s')
+plot(Freqs2$frequency)
+```
+
+```{r}
+seuil = 0.997940
+indices=which(Freqs2$frequency>=seuil)
+
+Yvec=as.numeric(Y_scaled%*%square_root_inv_hat_Sigma)
+
+Xvec=kronecker(t(square_root_inv_hat_Sigma),X)
+Xvec_sel=(Xvec[,indices])
+
+B_sel_hat=solve(t(Xvec_sel)%*%Xvec_sel,t(Xvec_sel)%*%Yvec)
+
+Freqs2$estim=rep(0,p*q)
+Freqs2$estim[indices]=as.vector(B_sel_hat)
+```
+
+```{r}
+gr<-ggplot(data=Freqs2[Freqs2$frequency>=seuil,],
+aes(x=Names_of_Y,y=Names_of_X,color=estim))+
+scale_color_gradient2(low="steelblue",mid = "white", high ="red")+
+geom_point(size=2)+theme_bw()+ylab('Temperature')+
+xlab('Proteins')+theme(axis.text.x = element_text(angle=90))
+gr
+save(gr,file="prot_fh_500k_rep.png")
+```
+
+
+```{r}
+#On regarde rapidement ce que l'on pourrait obtenir avec une transfo non paramétrique
+square_root_inv_hat_Sigma = whitening(residuals, "nonparam", pAR = 1, qMA = 0)
+Freqs = variable_selection(Y_scaled, X, square_root_inv_hat_Sigma,
+                          nb_repli = 50000, parallel = FALSE, nb.cores = 12)
+save(Freqs, file='proteome_np_50K_rep.Rdata')
+```
+
