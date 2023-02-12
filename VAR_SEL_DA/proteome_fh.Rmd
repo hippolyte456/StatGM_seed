@@ -103,8 +103,14 @@ xlab('Proteins')+theme(axis.text.x = element_text(angle=90))
 gr
 save(gr,file="prot_fh_500k_rep.png")
 ```
+```{r}
+prot_list_no_whit = Freqs2$Names_of_Y[indices]
+```
 
 
+
+
+#
 ```{r}
 #On regarde rapidement ce que l'on pourrait obtenir avec une transfo non paramétrique
 square_root_inv_hat_Sigma = whitening(residuals, "nonparam", pAR = 1, qMA = 0)
@@ -112,4 +118,131 @@ Freqs = variable_selection(Y_scaled, X, square_root_inv_hat_Sigma,
                           nb_repli = 50000, parallel = FALSE, nb.cores = 1)
 save(Freqs, file='proteome_np_50K_rep.Rdata')
 ```
+
+```{r}
+load("proteome_np_50K_rep.Rdata")
+Freqs2 = Freqs
+max(Freqs2$frequency)
+min(Freqs2$frequency)
+```
+
+```{r}
+colnames(Freqs2)<-c('Names_of_Y','Names_of_X','frequency')
+Freqs2=data.frame(Freqs2)
+
+plot(sort(Freqs2$frequency,decreasing = TRUE),type='s')
+plot(Freqs2$frequency)
+```
+
+```{r}
+sort(Freqs2$frequency,decreasing = T)[1:51]
+```
+```{r}
+seuil = 0.99946 
+indices=which(Freqs2$frequency>=seuil)
+
+Yvec=as.numeric(Y_scaled%*%square_root_inv_hat_Sigma)
+
+Xvec=kronecker(t(square_root_inv_hat_Sigma),X)
+Xvec_sel=(Xvec[,indices])
+
+B_sel_hat=solve(t(Xvec_sel)%*%Xvec_sel,t(Xvec_sel)%*%Yvec)
+
+Freqs2$estim=rep(0,p*q)
+Freqs2$estim[indices]=as.vector(B_sel_hat)
+```
+
+```{r}
+gr<-ggplot(data=Freqs2[Freqs2$frequency>=seuil,],
+aes(x=Names_of_Y,y=Names_of_X,color=estim))+
+scale_color_gradient2(low="steelblue",mid = "white", high ="red")+
+geom_point(size=2)+theme_bw()+ylab('Temperature')+
+xlab('Proteins')+theme(axis.text.x = element_text(angle=90))
+gr
+save(gr,file="prot_fh_500k_rep.png")
+```
+```{r}
+prot_list_non_param = Freqs2$Names_of_Y[indices]
+```
+
+```{r}
+common_prot = intersect(prot_list_no_whit, prot_list_non_param)
+```
+
+```{r}
+library(pheatmap)
+library(RColorBrewer)
+library(MultiVarSel)
+library(reshape)
+library(ggplot2)
+library(knitr)
+library(FactoMineR)
+library(factoextra)
+library(dplyr)
+```
+
+```{r}
+name = Freqs2$Names_of_Y[indices]
+tab2 = tab[ ,name]
+tab2 <- scale(tab2)
+```
+
+```{r}
+groupe <- rep(c("3_Elevated_LI", "3_Elevated_EI", "3_Elevated_DS","1_Low_LI", "1_Low_EI", "1_Low_DS", "2_Medium_LI", "2_Medium_EI", "2_Medium_DS"), each=3)
+
+sample_group <- data.frame(groupe = factor(groupe))
+
+row.names(sample_group) <- row.names(tab2)
+
+my_colour = list(
+  groupe = c(
+    "3_Elevated_LI" = "#fc1704",
+    "3_Elevated_EI" = "#fc6457",
+    "3_Elevated_DS" = "#faafa8",
+    "1_Low_LI" = "#0267fe",
+    "1_Low_EI" = "#679dfb",
+    "1_Low_DS" = "#bad1f9",
+    "2_Medium_LI" = "#26fb03",
+    "2_Medium_EI" = "#80fa6c",
+    "2_Medium_DS" = "#cdfac6"
+    ))
+```
+
+
+```{r}
+sample_group$groupe <- gsub("\\bElevated_LI", "3_Elevated_LI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bElevated_EI", "3_Elevated_EI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bElevated_DS", "3_Elevated_DS", sample_group$groupe )
+sample_group$groupe <- gsub("\\bMedium_DS", "2_Medium_DS", sample_group$groupe )
+sample_group$groupe <- gsub("\\bMedium_EI", "2_Medium_EI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bMedium_LI", "2_Medium_LI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bLow_LI", "1_Low_LI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bLow_DS", "1_Low_DS", sample_group$groupe )
+sample_group$groupe <- gsub("\\bLow_EI", "1_Low_EI", sample_group$groupe )
+```
+
+```{r}
+row.names(tab2) = sample_group$groupe
+```
+
+
+```{r}
+my_heatmap <- 
+pheatmap(
+  as.matrix(tab2),
+  color = colorRampPalette(rev(brewer.pal(
+    n = 11, name = "RdYlBu"
+  )))(100),
+  clustering_method = "ward.D2",
+  annotation_row = sample_group,
+  annotation_colors = my_colour,
+  cutree_rows = 3,
+  cutree_cols = 2,
+  show_colnames = F,
+  main = "Heatmap proteome 20 variables",
+  cex = 1,
+  border_color = "black"
+)
+```
+
 
