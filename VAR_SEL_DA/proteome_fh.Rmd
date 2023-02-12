@@ -109,7 +109,7 @@ save(gr,file="prot_fh_500k_rep.png")
 #On regarde rapidement ce que l'on pourrait obtenir avec une transfo non paramétrique
 square_root_inv_hat_Sigma = whitening(residuals, "nonparam", pAR = 1, qMA = 0)
 Freqs = variable_selection(Y_scaled, X, square_root_inv_hat_Sigma,
-                          nb_repli = 50000, parallel = FALSE, nb.cores = 12)
+                          nb_repli = 50000, parallel = FALSE, nb.cores = 1)
 save(Freqs, file='proteome_np_50K_rep.Rdata')
 ```
 
