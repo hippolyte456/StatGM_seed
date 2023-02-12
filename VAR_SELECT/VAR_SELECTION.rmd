@@ -1,6 +1,8 @@
 ---
 title: "VAR Selection"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 # Chargement des librairies
@@ -30,7 +32,7 @@ dim(table)
 ### Creation d'une variable qualitative supplementaire pour enlever les replicats
 temperature<-factor(rep(c("Low","Medium","Elevated"),each=3),levels=c("Low","Medium","Elevated"))
 imbibition<-factor(rep(c("DS", "EI", "LI"), each=3), levels=c("DS", "EI", "LI"))
-imbibition_Temp<-factor(rep(c("Low_DS", "Low_EI", "Low_LI", "Medium_DS", "Medium_EI", "Medium_LI", "Elevated_DS", "Elevated_EI", "Elevated_LI"), each=9), levels=c("Low_DS", "Low_EI", "Low_LI", "Medium_DS", "Medium_EI", "Medium_LI", "Elevated_DS", "Elevated_EI", "Elevated_LI"))
+imbibition_Temp<-factor(rep(c( "Elevated_LI", "Elevated_EI", "Elevated_DS","Low_LI", "Low_EI", "Low_DS", "Medium_LI", "Medium_EI", "Medium_DS"), each=9), levels=c("Elevated_LI", "Elevated_EI", "Elevated_DS","Low_LI", "Low_EI", "Low_DS", "Medium_LI", "Medium_EI", "Medium_DS"))
 ```
 
 ## Vérification de la présence de col dont les valeures ne bougent jamais et d'éventuelles données manquantes
@@ -42,62 +44,34 @@ which(is.na(table))
 ```{r}
 table2 <- table[,c(1,5:ncol(table))]
 Y <- as.matrix(table2[, -(1)])
-X1 <- table2[, 1]
-```
-
-```{r}
-table[,15]
+X1 <- table$temperature
+X2 <- table$imbibition
+X3 <- table$group
 ```
 
 
 ```{r}
-library(rstatix)
-shapiro_test(Y[,15])
-```
-
-
-
-```{r}
-library(rstatix)
-
-# Créer une fonction de test de normalité
-shapiro.test <- function(x) {
-  shapiro_test(x)
-}
-
-gauss_transform <- function(data) {
-  # Appliquer la transformation logarithmique
-  data <- log(data)
-  # Retourner les données transformées
-  return(data)
-}
-
-# Appliquer la fonction à un dataframe
-test_normalite <- function(dataframe) {
-  nbr_col <- 0
-  for (col in colnames(dataframe)) {
-    shapiro.test_result <- shapiro.test(dataframe[, col])
-    if (shapiro.test_result$p.value > 0.05) {
-      dataframe[, col] <- gauss_transform(dataframe[, col])
-      nbr_col <- nbr_col + 1
-    }
-  }
-  print(nbr_col)
-  return (dataframe)
-}
-
-# Appliquer la fonction à un dataframe
-Y <- test_normalite(Y)
-```
-
-
-
-```{r}
-B <- model.matrix(lm(Y ~ (X1) + 0)) # matrices de design 
+B <- model.matrix(lm(Y ~ (X1 +X2) + 0)) # matrices de design 
 p <- ncol(B)
 n=nrow(B)
 print(n)
 ```
+
+
+```{r}
+table2 <- table[,c(1,5:ncol(table))]
+Y <- as.matrix(table2[, -(1)])
+X1 <- table$temperature
+X2 <- table$imbibition
+B <- model.matrix(lm(Y ~ (X1 + X2) + 0)) # matrices de design 
+# X1 + X2 juste pour limiter la complexité 
+# on prend pas les intercepts avec 0 
+p <- ncol(B)
+n=nrow(B)
+print(n)
+```
+
+
 ```{r}
 q=dim(Y)[2] 
 print(q)
@@ -107,33 +81,31 @@ print(q)
 ```{r}
 Yscaled = scale(Y) # Normalization
 residuals=lm(as.matrix(Yscaled)~B-1)$residuals
+# justfier le -1 
 ```
 
 We apply the whitening test to this residuals matrix in order to know if it is useful to whiten the observations
 or not
 
 ```{r}
-pvalue=whitening_test(residuals)
-# Cette fonction calcule la somme des carrés des coefficients de corrélation partiels (ACF) d'un vecteur de résidus donné.
-pvalue
+whitening_test(residuals)
 ```
 P value est trop forte donc on peut pas refuser h0
 
 
 ```{r}
-result=whitening_choice(residuals,c("AR1","nonparam","ARMA"),pAR=1,qMA=1)
-result
+whitening_choice(residuals,c("AR1","nonparam","ARMA"),pAR=1,qMA=0)
 ```
 
 # Anova séparée, métabolite par métabolite
 
 ```{r}
 select_per_anova=c()
-for(i in 3:ncol(table2)){
-  res.anova<-lm(table2[,i]~table2[,2], data=table2)
+for(i in 2:ncol(table2)){
+  res.anova<-lm(table2[,i]~table2[,1], data=table2)
   pvalue.anova=c()
   pvalue.anova<-anova(res.anova)$'Pr(>F)'[1]
-  if(pvalue.anova<0.05/q){
+  if(pvalue.anova<0.005/q){
     select_per_anova=c(select_per_anova,colnames(table2)[i])}}
 length(select_per_anova)
 ```
@@ -157,10 +129,9 @@ square_root_inv_hat_Sigma=whitening(residuals,"no_whitening",pAR=1,qMA=0)
 ```{r}
 library(parallel)
 require(doMC)
-registerDoMC(cores=6)
-Freqs2=variable_selection(Yscaled,B,square_root_inv_hat_Sigma, nb_repli=50000,parallel=TRUE,nb.cores=6)
-
-save(Freqs2, file='./tables_output/50000_nonparam_blanchi_2022.Rdata')
+registerDoMC(cores=5)
+# Freqs2=variable_selection(Yscaled,B,square_root_inv_hat_Sigma,nb_repli=10000,parallel=TRUE,nb.cores = 5)
+#save(Freqs2, file='./tables_output/10000_2_non_blanchi_X1+X2.Rdata')
 ```
 On blanchit -> vectorisation ( on se retrouve avec un nouveau Y (de taille n*q), beta (taille p fois q), E)
 -> Lasso avec cross validation -> Stability selection (0 = ridge, 0.5 = elastic net)
@@ -168,12 +139,15 @@ On blanchit -> vectorisation ( on se retrouve avec un nouveau Y (de taille n*q),
 
 
 ```{r}
-load('./tables_output/5000_non_blanchi_2022.Rdata')
+load('./tables_output/500K_non_blanchi_X1+X2.Rdata')
 ```
+
 
 ```{r}
 colnames(Freqs2)<-c('Names_of_Y','Names_of_X','frequency') 
-plot(sort(Freqs2$frequency,decreasing = T),type='s')
+png(file="./images/500K_Freq_dec.png")
+plot(sort(Freqs2$frequency,decreasing = T),type='s', main="Fréquences de sélection décroissante des protéines")
+dev.off()
 ```
 
 
@@ -182,10 +156,12 @@ sort(Freqs2$frequency,decreasing = T)[1:50]
 ```
 
 
+
 ```{r}
-seuil_non_blanchi=0.65
+seuil_non_blanchi=0.99803
 Freqs2$Names_of_X=gsub(pattern='temperature',replacement='',Freqs2$Names_of_X)
 indices=which(Freqs2$frequency>=seuil_non_blanchi)
+#indices <- match(Name, Freqs2$Names_of_Y)
 length(indices)
 Yvec=as.numeric(Yscaled%*%square_root_inv_hat_Sigma) 
 Xvec=kronecker(t(square_root_inv_hat_Sigma),B) 
@@ -196,10 +172,15 @@ Freqs2$estim[indices]=as.vector(B_sel_hat)
 ```
 
 ```{r}
+Freqs2[Freqs2$frequency>=seuil_non_blanchi,]
+```
+
+
+```{r}
 gr<-ggplot(data=Freqs2[Freqs2$frequency>=seuil_non_blanchi,], 
            aes(x=Names_of_Y,y=Names_of_X,color=estim))+
         scale_color_gradient2(low="steelblue",mid = "white", high ="red")+  
-    geom_point(size=2)+theme_bw()+ylab('Temperature')+xlab('Proteins')+theme(axis.text.x = element_text(angle=90))
+    geom_point(size=3)+theme_bw()+ylab('Temperature + Imbiition')+xlab('Proteins')+theme(axis.text.x = element_text(angle=90))
 gr
 ```
 
@@ -212,17 +193,40 @@ for (i in Name){
 
 
 ```{r}
-table_red=as.data.frame(Yscaled[,colnames(Yscaled)%in%unique(Freqs2[indices,]$Names_of_Y)])
-
-table_red$imbibition_Temp=table2[,1]
-bp <- ggplot(melt(table_red), aes(x=imbibition_Temp, y=value,fill=imbibition_Temp)) + 
-  geom_boxplot()+theme_bw()
+ind <- c(2076, 2077, 2078,2079,2080) #AT5G20960.1
+ind2 <- c(1291, 1292, 1293, 1294, 1295) # AT3G48000.1
+ind3 <- c(1976, 1977, 1978, 1979, 1980) # AT5G12950.1
+ind4 <- c(521, 522, 523,524, 525) # AT1G74960.1
+table_red=as.data.frame(Yscaled[,colnames(Yscaled)%in%unique(Freqs2[ind4,]$Names_of_Y)])
+table_red$imbibition_Temp <- table2[,1]
+table_red$imbibition_Temp <- gsub("\\bElevated_LI", "3_Elevated_LI", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bElevated_EI", "3_Elevated_EI", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bElevated_DS", "3_Elevated_DS", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bMedium_DS", "2_Medium_DS", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bMedium_EI", "2_Medium_EI", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bMedium_LI", "2_Medium_LI", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bLow_LI", "1_Low_LI", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bLow_DS", "1_Low_DS", table_red$imbibition_Temp)
+table_red$imbibition_Temp <- gsub("\\bLow_EI", "1_Low_EI", table_red$imbibition_Temp)
 ```
+
+
 
 ```{r}
-bp+facet_wrap(~variable,ncol=4)+ylab("Réponse")
-```
+colnames(table_red)[1] <- "AT1G74960.1"
+bp <- ggplot(melt(table_red), aes(x=imbibition_Temp, y=value, fill=imbibition_Temp)) + 
+  geom_boxplot()+theme_bw() + scale_fill_manual(values=c( "#0267fe", "#679dfb","#bad1f9"
+                                                          ,"#26fb03","#80fa6c","#cdfac6"
+                                                          , "#fc1704","#fc6457", "#faafa8"
+                                                         ))
 
+bp + facet_wrap(~variable, ncol=4) + ylab("Réponse") + 
+  labs(fill = "Température + Imbibition") +
+  scale_fill_manual(values=c("#0267fe", "#679dfb","#bad1f9", "#26fb03","#80fa6c","#cdfac6",
+                            "#fc1704","#fc6457", "#faafa8")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+``` 
 
 #Heatmap
 
@@ -247,7 +251,7 @@ library(pheatmap)
 
 library(RColorBrewer)
 
-groupe <- rep(c("Low_DS", "Low_EI", "Low_LI", "Medium_DS", "Medium_EI", "Medium_LI", "Elevated_DS", "Elevated_EI", "Elevated_LI"), each=3)
+groupe <- rep(c("3_Elevated_LI", "3_Elevated_EI", "3_Elevated_DS","1_Low_LI", "1_Low_EI", "1_Low_DS", "2_Medium_LI", "2_Medium_EI", "2_Medium_DS"), each=3)
 
 sample_group <- data.frame(groupe = groupe)
 
@@ -255,23 +259,35 @@ row.names(sample_group) <- row.names(tableVP)
 
 my_colour = list(
   groupe = c(
-    "Low_DS" = "#bad1f9",
-    "Low_EI" = "#679dfb",
-    "Low_LI" = "#0267fe",
-    "Medium_DS" = "#cdfac6",
-    "Medium_EI" = "#80fa6c",
-    "Medium_LI" = "#26fb03",
-    "Elevated_DS" = "#faafa8",
-    "Elevated_EI" = "#fc6457",
-    "Elevated_LI" = "#fc1704"))
+    "3_Elevated_LI" = "#fc1704",
+    "3_Elevated_EI" = "#fc6457",
+    "3_Elevated_DS" = "#faafa8",
+    "1_Low_LI" = "#0267fe",
+    "1_Low_EI" = "#679dfb",
+    "1_Low_DS" = "#bad1f9",
+    "2_Medium_LI" = "#26fb03",
+    "2_Medium_EI" = "#80fa6c",
+    "2_Medium_DS" = "#cdfac6"
+    ))
 
+```
+
+```{r}
+sample_group$groupe <- gsub("\\bElevated_LI", "3_Elevated_LI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bElevated_EI", "3_Elevated_EI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bElevated_DS", "3_Elevated_DS", sample_group$groupe )
+sample_group$groupe <- gsub("\\bMedium_DS", "2_Medium_DS", sample_group$groupe )
+sample_group$groupe <- gsub("\\bMedium_EI", "2_Medium_EI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bMedium_LI", "2_Medium_LI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bLow_LI", "1_Low_LI", sample_group$groupe )
+sample_group$groupe <- gsub("\\bLow_DS", "1_Low_DS", sample_group$groupe )
+sample_group$groupe <- gsub("\\bLow_EI", "1_Low_EI", sample_group$groupe )
 ```
 
 
 # Heatmap
 
 ```{r}
-
 my_heatmap <- 
 pheatmap(
   as.matrix(tableVP),
@@ -281,10 +297,10 @@ pheatmap(
   clustering_method = "ward.D2",
   annotation_row = sample_group,
   annotation_colors = my_colour,
-  cutree_rows = 5,
+  cutree_rows = 8,
   cutree_cols = 4,
   show_colnames = F,
-  main = "Heatmap proteome 214 variables",
+  main = "Heatmap proteome 20 variables",
   cex = 1,
   border_color = "black"
 )
@@ -298,9 +314,10 @@ pheatmap(
 ```{r}
 Insert_selected_variable <- function(dataframe, name, path_to_file) {
   load(path_to_file)
-  seuil <- sort(Freqs2$frequency,decreasing = T)[50]
+  seuil <- sort(Freqs2$frequency,decreasing = T)[nrow(dataframe)]
+  seuil<- 0.9977
   var = Freqs2$Names_of_Y[Freqs2$frequency>=seuil]
-  dataframe[name] = var[1:50]
+  dataframe[name] = var[1:nrow(dataframe)]
   return(dataframe)
 }
 
@@ -316,12 +333,20 @@ table_name <- Insert_selected_variable(table_name, 'AR1_5000', './tables_output/
 table_name <- Insert_selected_variable(table_name, 'nonparam_5000', './tables_output/5000_nonparam_blanchi_2022.Rdata')
 table_name <- Insert_selected_variable(table_name, 'nonparam_50000', './tables_output/50000_nonparam_blanchi_2022.Rdata')
 table_name <- Insert_selected_variable(table_name, 'nonblanchi_5000', './tables_output/5000_non_blanchi_2022.Rdata')
+table_name <- Insert_selected_variable(table_name, 'nonblanchi_500K', './tables_output/500K_non_blanchi_X1+X2.Rdata')
+table_name <- Insert_selected_variable(table_name, 'nonblanchi_10K1', './tables_output/10000_non_blanchi_X1+X2.Rdata')
+table_name <- Insert_selected_variable(table_name, 'nonblanchi_10K2', './tables_output/10000_2_non_blanchi_X1+X2.Rdata')
 ```
 
 
 ```{r}
-intersect(table_name[,5], table_name[,4])
+test <- intersect(table_name[,6], table_name[,7])
+Name <- intersect(test, table_name[,8])
 ```
+```{r}
+Name
+```
+
 
 
 
